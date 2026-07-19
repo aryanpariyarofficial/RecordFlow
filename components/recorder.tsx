@@ -271,15 +271,7 @@ export function Recorder() {
           <div className="flex flex-col gap-6">
             {/* Live preview: composited canvas or camera feed */}
             {engine?.compositor && (
-              <div>
-                <CompositePreview compositor={engine.compositor} />
-                <div className="mt-3 flex items-center justify-between">
-                  <p className="text-xs text-muted">
-                    Drag inside the preview to move your bubble.
-                  </p>
-                  <BubbleSizePicker compositor={engine.compositor} />
-                </div>
-              </div>
+              <CompositePreview compositor={engine.compositor} />
             )}
             {!engine?.compositor && engine?.cameraPreviewStream && (
               <CameraPreview stream={engine.cameraPreviewStream} />
@@ -387,10 +379,19 @@ export function Recorder() {
   );
 }
 
-/** Live composited canvas; dragging moves the webcam bubble. */
+const PEN_COLORS = ["#FF009D", "#5501FE", "#FFFFFF", "#0f0f0f"];
+
+/**
+ * Live composited canvas. Two pointer tools: move the webcam bubble
+ * (when there is one) or draw annotations straight into the recording.
+ */
 function CompositePreview({ compositor }: { compositor: Compositor }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const draggingRef = useRef(false);
+  const pointerDownRef = useRef(false);
+  const [tool, setTool] = useState<"move" | "draw">(
+    compositor.hasCamera ? "move" : "draw"
+  );
+  const [penColor, setPenColor] = useState(PEN_COLORS[0]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -406,30 +407,92 @@ function CompositePreview({ compositor }: { compositor: Compositor }) {
     };
   }, [compositor]);
 
-  const moveBubble = (e: React.PointerEvent<HTMLDivElement>) => {
+  const normalized = (e: React.PointerEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    compositor.setBubblePosition({
-      cx: (e.clientX - rect.left) / rect.width,
-      cy: (e.clientY - rect.top) / rect.height,
-    });
+    return {
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    };
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="cursor-move touch-none overflow-hidden rounded-xl border border-black/10 bg-ink"
-      onPointerDown={(e) => {
-        draggingRef.current = true;
-        e.currentTarget.setPointerCapture(e.pointerId);
-        moveBubble(e);
-      }}
-      onPointerMove={(e) => {
-        if (draggingRef.current) moveBubble(e);
-      }}
-      onPointerUp={() => {
-        draggingRef.current = false;
-      }}
-    />
+    <div>
+      <div
+        ref={containerRef}
+        className={`touch-none overflow-hidden rounded-xl border border-black/10 bg-ink ${
+          tool === "draw" ? "cursor-crosshair" : "cursor-move"
+        }`}
+        onPointerDown={(e) => {
+          pointerDownRef.current = true;
+          e.currentTarget.setPointerCapture(e.pointerId);
+          const { x, y } = normalized(e);
+          if (tool === "draw") compositor.startStroke(penColor, x, y);
+          else compositor.setBubblePosition({ cx: x, cy: y });
+        }}
+        onPointerMove={(e) => {
+          if (!pointerDownRef.current) return;
+          const { x, y } = normalized(e);
+          if (tool === "draw") compositor.addStrokePoint(x, y);
+          else compositor.setBubblePosition({ cx: x, cy: y });
+        }}
+        onPointerUp={() => {
+          pointerDownRef.current = false;
+          compositor.endStroke();
+        }}
+      />
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {compositor.hasCamera && (
+            <div className="flex rounded-full border border-black/10 p-0.5">
+              {(["move", "draw"] as const).map((option) => (
+                <button
+                  key={option}
+                  onClick={() => setTool(option)}
+                  className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition ${
+                    tool === option
+                      ? "bg-ink text-white"
+                      : "text-muted hover:text-ink"
+                  }`}
+                >
+                  {option === "move" ? "Move bubble" : "Draw"}
+                </button>
+              ))}
+            </div>
+          )}
+          {tool === "draw" && (
+            <>
+              <div className="flex items-center gap-1.5">
+                {PEN_COLORS.map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => setPenColor(color)}
+                    aria-label={`Pen color ${color}`}
+                    className={`h-6 w-6 rounded-full border transition ${
+                      penColor === color
+                        ? "scale-110 border-ink"
+                        : "border-black/15"
+                    }`}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={() => compositor.clearAnnotations()}
+                className="text-xs font-medium text-muted transition hover:text-primary"
+              >
+                Clear drawing
+              </button>
+            </>
+          )}
+        </div>
+        {compositor.hasCamera && <BubbleSizePicker compositor={compositor} />}
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        {tool === "draw"
+          ? "Draw on the preview — strokes are recorded into the video. Clear when done."
+          : "Drag inside the preview to move your bubble."}
+      </p>
+    </div>
   );
 }
 

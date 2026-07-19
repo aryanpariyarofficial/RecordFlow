@@ -22,6 +22,8 @@ export function LibraryItem({
   durationSeconds,
   views,
   processing,
+  hasPassword,
+  expiresAt,
   thumbnail,
 }: {
   slug: string;
@@ -30,6 +32,8 @@ export function LibraryItem({
   durationSeconds: number | null;
   views: number;
   processing: boolean;
+  hasPassword: boolean;
+  expiresAt: string | null;
   thumbnail: string;
 }) {
   const router = useRouter();
@@ -42,7 +46,52 @@ export function LibraryItem({
   const [trimStart, setTrimStart] = useState("");
   const [trimEnd, setTrimEnd] = useState("");
   const [trimError, setTrimError] = useState<string | null>(null);
+  const [protectOpen, setProtectOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [protectMsg, setProtectMsg] = useState<string | null>(null);
   const viewerPath = `/v/${slug}`;
+  const isExpired = expiresAt ? new Date(expiresAt) < new Date() : false;
+
+  const saveProtection = async () => {
+    setBusy(true);
+    setProtectMsg(null);
+    const payload: Record<string, unknown> = {};
+    if (password !== "") payload.password = password;
+    if (expiry !== "") {
+      payload.expiresInDays = expiry === "never" ? null : Number(expiry);
+    }
+    if (Object.keys(payload).length === 0) {
+      setBusy(false);
+      setProtectMsg("Nothing to change.");
+      return;
+    }
+    const res = await fetch(`/api/recordings/${slug}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).catch(() => null);
+    setBusy(false);
+    if (res?.ok) {
+      setPassword("");
+      setExpiry("");
+      setProtectOpen(false);
+      router.refresh();
+    } else {
+      setProtectMsg("Could not save link settings — try again.");
+    }
+  };
+
+  const removePassword = async () => {
+    setBusy(true);
+    const res = await fetch(`/api/recordings/${slug}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "" }),
+    }).catch(() => null);
+    setBusy(false);
+    if (res?.ok) router.refresh();
+  };
 
   const copyLink = async () => {
     try {
@@ -145,6 +194,23 @@ export function LibraryItem({
             Processing…
           </span>
         )}
+        <span className="absolute right-3 top-3 flex gap-1.5">
+          {hasPassword && (
+            <span className="rounded-full bg-ink/80 px-2.5 py-1 text-xs font-semibold text-white">
+              🔒
+            </span>
+          )}
+          {expiresAt && (
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold text-white ${
+                isExpired ? "bg-primary/90" : "bg-ink/80"
+              }`}
+              title={`Link ${isExpired ? "expired" : "expires"} ${new Date(expiresAt).toLocaleDateString()}`}
+            >
+              {isExpired ? "Expired" : "⏳"}
+            </span>
+          )}
+        </span>
       </a>
       <div className="p-4">
         {renaming ? (
@@ -197,6 +263,14 @@ export function LibraryItem({
               >
                 Trim
               </button>
+              <button
+                onClick={() => setProtectOpen((open) => !open)}
+                className={`font-medium transition ${
+                  protectOpen ? "text-ink" : "text-muted hover:text-ink"
+                }`}
+              >
+                Protect
+              </button>
             </>
           )}
           <button
@@ -247,6 +321,65 @@ export function LibraryItem({
             )}
             <p className="mt-2 text-xs text-muted">
               Downloads a trimmed MP4 — the original stays untouched.
+            </p>
+          </div>
+        )}
+
+        {protectOpen && !processing && (
+          <div className="mt-3 rounded-xl border border-black/10 bg-black/[0.02] p-3">
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={
+                    hasPassword ? "New password" : "Set a password (optional)"
+                  }
+                  maxLength={72}
+                  className="w-full min-w-0 flex-1 rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-secondary"
+                />
+                {hasPassword && (
+                  <button
+                    onClick={removePassword}
+                    disabled={busy}
+                    className="shrink-0 text-xs font-medium text-muted transition hover:text-primary"
+                  >
+                    Remove password
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={expiry}
+                  onChange={(e) => setExpiry(e.target.value)}
+                  className="flex-1 rounded-lg border border-black/10 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-secondary"
+                >
+                  <option value="">
+                    {expiresAt
+                      ? `Expiry: ${new Date(expiresAt).toLocaleDateString()} (keep)`
+                      : "Link expiry: never (keep)"}
+                  </option>
+                  <option value="1">Expire in 1 day</option>
+                  <option value="7">Expire in 7 days</option>
+                  <option value="30">Expire in 30 days</option>
+                  <option value="never">Never expire</option>
+                </select>
+                <button
+                  onClick={saveProtection}
+                  disabled={busy}
+                  className="shrink-0 rounded-lg bg-secondary px-3.5 py-1.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+            {protectMsg && (
+              <p className="mt-2 text-xs text-primary">{protectMsg}</p>
+            )}
+            <p className="mt-2 text-xs text-muted">
+              Viewers with the link will need the password; expired links stop
+              working for everyone.
             </p>
           </div>
         )}

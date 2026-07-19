@@ -16,6 +16,17 @@ export interface RecordingRow {
   views: number;
   status: RecordingStatus;
   user_id: string | null;
+  password_hash: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface CommentRow {
+  id: string;
+  slug: string;
+  author: string;
+  body: string;
+  at_seconds: number | null;
   created_at: string;
 }
 
@@ -53,6 +64,8 @@ export async function updateRecording(
     title: string;
     status: RecordingStatus;
     duration_seconds: number;
+    password_hash: string | null;
+    expires_at: string | null;
   }>
 ): Promise<boolean> {
   const db = getDb();
@@ -101,4 +114,59 @@ export async function incrementViews(slug: string): Promise<void> {
   const db = getDb();
   if (!db) return;
   await db.rpc("increment_views", { p_slug: slug });
+}
+
+export async function listComments(slug: string): Promise<CommentRow[]> {
+  const db = getDb();
+  if (!db) return [];
+  const { data } = await db
+    .from("comments")
+    .select("*")
+    .eq("slug", slug)
+    .order("created_at", { ascending: true })
+    .limit(200);
+  return (data as CommentRow[]) ?? [];
+}
+
+export async function addComment(comment: {
+  slug: string;
+  author: string;
+  body: string;
+  at_seconds: number | null;
+}): Promise<CommentRow | null> {
+  const db = getDb();
+  if (!db) return null;
+  const { data, error } = await db
+    .from("comments")
+    .insert(comment)
+    .select()
+    .single();
+  return error ? null : (data as CommentRow);
+}
+
+export async function listReactionCounts(
+  slug: string
+): Promise<Record<string, number>> {
+  const db = getDb();
+  if (!db) return {};
+  const { data } = await db
+    .from("reactions")
+    .select("emoji")
+    .eq("slug", slug)
+    .limit(5000);
+  const counts: Record<string, number> = {};
+  for (const row of (data as { emoji: string }[]) ?? []) {
+    counts[row.emoji] = (counts[row.emoji] ?? 0) + 1;
+  }
+  return counts;
+}
+
+export async function addReaction(
+  slug: string,
+  emoji: string
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) return false;
+  const { error } = await db.from("reactions").insert({ slug, emoji });
+  return !error;
 }

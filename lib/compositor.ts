@@ -1,7 +1,7 @@
 /**
- * Canvas compositor: draws the screen capture full-frame and the webcam as a
- * circular bubble on top, then exposes the result as a MediaStream via
- * canvas.captureStream().
+ * Canvas compositor: draws the screen capture full-frame, an optional
+ * circular webcam bubble, and a live annotation (pen) layer on top, then
+ * exposes the result as a MediaStream via canvas.captureStream().
  *
  * The draw loop is driven by a Web Worker timer instead of
  * requestAnimationFrame/setInterval, because both are throttled hard when the
@@ -17,6 +17,12 @@ export interface BubblePosition {
   cy: number;
 }
 
+interface Stroke {
+  color: string;
+  /** Normalized 0..1 points. */
+  points: { x: number; y: number }[];
+}
+
 const SIZE_FRACTION: Record<BubbleSize, number> = {
   sm: 0.2,
   md: 0.28,
@@ -24,6 +30,8 @@ const SIZE_FRACTION: Record<BubbleSize, number> = {
 };
 
 const FPS = 30;
+/** Pen width as a fraction of canvas height. */
+const STROKE_FRACTION = 0.006;
 
 const WORKER_SOURCE = `
   let id = null;
@@ -48,17 +56,21 @@ async function attachVideo(stream: MediaStream): Promise<HTMLVideoElement> {
 
 export class Compositor {
   readonly canvas: HTMLCanvasElement;
+  readonly hasCamera: boolean;
   private ctx: CanvasRenderingContext2D;
   private screenVideo: HTMLVideoElement | null = null;
   private camVideo: HTMLVideoElement | null = null;
   private worker: Worker | null = null;
   private bubble: BubblePosition = { cx: 0.13, cy: 0.82 };
   private bubbleSize: BubbleSize = "md";
+  private strokes: Stroke[] = [];
+  private activeStroke: Stroke | null = null;
 
   constructor(
     private screenStream: MediaStream,
-    private camStream: MediaStream
+    private camStream: MediaStream | null
   ) {
+    this.hasCamera = camStream !== null;
     this.canvas = document.createElement("canvas");
     const ctx = this.canvas.getContext("2d");
     if (!ctx) throw new Error("Canvas 2D is not available");
@@ -66,10 +78,10 @@ export class Compositor {
   }
 
   async start(): Promise<MediaStream> {
-    [this.screenVideo, this.camVideo] = await Promise.all([
-      attachVideo(this.screenStream),
-      attachVideo(this.camStream),
-    ]);
+    this.screenVideo = await attachVideo(this.screenStream);
+    if (this.camStream) {
+      this.camVideo = await attachVideo(this.camStream);
+    }
 
     const settings = this.screenStream.getVideoTracks()[0]?.getSettings();
     this.canvas.width = settings?.width || 1280;
@@ -99,9 +111,35 @@ export class Compositor {
     return this.bubbleSize;
   }
 
+  /* ── Annotation layer ─────────────────────────────────────────── */
+
+  startStroke(color: string, x: number, y: number): void {
+    this.activeStroke = { color, points: [{ x, y }] };
+    this.strokes.push(this.activeStroke);
+  }
+
+  addStrokePoint(x: number, y: number): void {
+    this.activeStroke?.points.push({ x, y });
+  }
+
+  endStroke(): void {
+    this.activeStroke = null;
+  }
+
+  clearAnnotations(): void {
+    this.strokes = [];
+    this.activeStroke = null;
+  }
+
+  hasAnnotations(): boolean {
+    return this.strokes.length > 0;
+  }
+
+  /* ── Draw loop ────────────────────────────────────────────────── */
+
   private draw(): void {
     const { canvas, ctx, screenVideo, camVideo } = this;
-    if (!screenVideo || !camVideo) return;
+    if (!screenVideo) return;
 
     // Shared windows can be resized mid-recording; follow the source.
     if (
@@ -114,9 +152,39 @@ export class Compositor {
     }
 
     ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
+    this.drawStrokes();
+    if (camVideo && camVideo.videoWidth > 0) this.drawBubble(camVideo);
+  }
 
-    if (camVideo.videoWidth === 0) return;
+  private drawStrokes(): void {
+    const { canvas, ctx } = this;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(2, STROKE_FRACTION * canvas.height);
+    for (const stroke of this.strokes) {
+      if (stroke.points.length === 0) continue;
+      ctx.strokeStyle = stroke.color;
+      ctx.beginPath();
+      ctx.moveTo(
+        stroke.points[0].x * canvas.width,
+        stroke.points[0].y * canvas.height
+      );
+      for (const point of stroke.points.slice(1)) {
+        ctx.lineTo(point.x * canvas.width, point.y * canvas.height);
+      }
+      if (stroke.points.length === 1) {
+        // A tap still leaves a dot.
+        ctx.lineTo(
+          stroke.points[0].x * canvas.width + 0.1,
+          stroke.points[0].y * canvas.height + 0.1
+        );
+      }
+      ctx.stroke();
+    }
+  }
 
+  private drawBubble(camVideo: HTMLVideoElement): void {
+    const { canvas, ctx } = this;
     const diameter = SIZE_FRACTION[this.bubbleSize] * canvas.height;
     const radius = diameter / 2;
     const pad = 8;

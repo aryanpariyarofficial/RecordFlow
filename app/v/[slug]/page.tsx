@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { getRecordingBySlug } from "@/lib/db";
 import { mp4DownloadUrl, thumbnailUrl, videoUrl } from "@/lib/cloudinary-urls";
 import { formatDate, formatDuration, formatSize } from "@/lib/format";
+import { isUnlockCookieValid, unlockCookieName } from "@/lib/passwords";
 import { ViewTracker } from "@/components/view-tracker";
 import { AutoRefresh } from "@/components/auto-refresh";
+import { PasswordGate } from "@/components/password-gate";
+import { ViewerPlayer } from "@/components/viewer-player";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +21,8 @@ interface RecordingView {
   sizeBytes: number | null;
   views: number | null;
   processing: boolean;
+  expired: boolean;
+  locked: boolean;
 }
 
 async function fromCloudinary(slug: string): Promise<RecordingView | null> {
@@ -44,6 +50,8 @@ async function fromCloudinary(slug: string): Promise<RecordingView | null> {
     sizeBytes: body.bytes,
     views: null,
     processing: false,
+    expired: false,
+    locked: false,
   };
 }
 
@@ -52,6 +60,15 @@ async function getRecording(slug: string): Promise<RecordingView | null> {
 
   const row = await getRecordingBySlug(slug);
   if (row) {
+    let locked = false;
+    if (row.password_hash) {
+      const cookieStore = await cookies();
+      locked = !isUnlockCookieValid(
+        cookieStore.get(unlockCookieName(slug))?.value,
+        slug,
+        row.password_hash
+      );
+    }
     return {
       title: row.title,
       url: videoUrl(slug),
@@ -60,6 +77,8 @@ async function getRecording(slug: string): Promise<RecordingView | null> {
       sizeBytes: row.size_bytes,
       views: row.views,
       processing: row.status === "processing",
+      expired: row.expires_at ? new Date(row.expires_at) < new Date() : false,
+      locked,
     };
   }
   // Recordings uploaded before the database existed (or if the metadata
@@ -74,7 +93,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const recording = await getRecording(slug);
-  const title = recording?.title ?? "Recording";
+  const gated =
+    !recording || recording.processing || recording.expired || recording.locked;
+  const title = !recording || recording.locked ? "Recording" : recording.title;
   return {
     title,
     description: "Watch this screen recording on RecordFlow.",
@@ -84,12 +105,30 @@ export async function generateMetadata({
       title: `${title} — RecordFlow`,
       description: "Watch this screen recording on RecordFlow.",
       type: "video.other",
-      ...(recording && !recording.processing
-        ? { images: [{ url: thumbnailUrl(slug), width: 640, height: 360 }] }
-        : {}),
+      ...(gated
+        ? {}
+        : { images: [{ url: thumbnailUrl(slug), width: 640, height: 360 }] }),
     },
     twitter: { card: "summary_large_image" },
   };
+}
+
+function StatusPanel({
+  icon,
+  headline,
+  detail,
+}: {
+  icon: React.ReactNode;
+  headline: string;
+  detail: string;
+}) {
+  return (
+    <div className="mt-4 flex aspect-video w-full flex-col items-center justify-center rounded-2xl border border-black/10 bg-ink px-6 text-center">
+      {icon}
+      <p className="mt-5 font-semibold text-white">{headline}</p>
+      <p className="mt-1 text-sm text-white/60">{detail}</p>
+    </div>
+  );
 }
 
 export default async function ViewerPage({
@@ -101,9 +140,12 @@ export default async function ViewerPage({
   const recording = await getRecording(slug);
   if (!recording) notFound();
 
+  const watchable =
+    !recording.processing && !recording.expired && !recording.locked;
+
   return (
     <div className="flex min-h-screen flex-col">
-      {!recording.processing && <ViewTracker slug={slug} />}
+      {watchable && <ViewTracker slug={slug} />}
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6">
         <Link href="/" className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary">
@@ -122,52 +164,59 @@ export default async function ViewerPage({
       </header>
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 pb-20">
-        {recording.processing ? (
+        {recording.expired ? (
+          <StatusPanel
+            icon={
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-2xl">
+                ⏳
+              </span>
+            }
+            headline="This link has expired"
+            detail="The owner set an expiry date for this recording. Ask them for a fresh link."
+          />
+        ) : recording.locked ? (
+          <PasswordGate slug={slug} />
+        ) : recording.processing ? (
           <>
             <AutoRefresh />
-            <div className="mt-4 flex aspect-video w-full flex-col items-center justify-center rounded-2xl border border-black/10 bg-ink text-center">
-              <span className="h-10 w-10 animate-spin rounded-full border-[3px] border-white/20 border-t-primary" />
-              <p className="mt-5 font-semibold text-white">
-                This video is still uploading
-              </p>
-              <p className="mt-1 text-sm text-white/60">
-                Hang tight — the page refreshes automatically.
-              </p>
-            </div>
+            <StatusPanel
+              icon={
+                <span className="h-10 w-10 animate-spin rounded-full border-[3px] border-white/20 border-t-primary" />
+              }
+              headline="This video is still uploading"
+              detail="Hang tight — the page refreshes automatically."
+            />
           </>
         ) : (
-          <video
-            src={recording.url}
-            controls
-            playsInline
-            className="mt-4 w-full rounded-2xl border border-black/10 bg-ink shadow-sm"
-          />
+          <ViewerPlayer slug={slug} url={recording.url} />
         )}
 
-        <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold sm:text-3xl">
-              {recording.title}
-            </h1>
-            <p className="mt-2 text-sm text-muted">
-              {formatDate(recording.createdAt)}
-              {typeof recording.durationSeconds === "number" &&
-                ` · ${formatDuration(recording.durationSeconds)}`}
-              {typeof recording.sizeBytes === "number" &&
-                ` · ${formatSize(recording.sizeBytes)}`}
-              {typeof recording.views === "number" &&
-                ` · ${recording.views} view${recording.views === 1 ? "" : "s"}`}
-            </p>
+        {!recording.expired && !recording.locked && (
+          <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold sm:text-3xl">
+                {recording.title}
+              </h1>
+              <p className="mt-2 text-sm text-muted">
+                {formatDate(recording.createdAt)}
+                {typeof recording.durationSeconds === "number" &&
+                  ` · ${formatDuration(recording.durationSeconds)}`}
+                {typeof recording.sizeBytes === "number" &&
+                  ` · ${formatSize(recording.sizeBytes)}`}
+                {typeof recording.views === "number" &&
+                  ` · ${recording.views} view${recording.views === 1 ? "" : "s"}`}
+              </p>
+            </div>
+            {watchable && (
+              <a
+                href={mp4DownloadUrl(slug)}
+                className="rounded-full border border-black/15 px-5 py-2.5 text-sm font-medium transition hover:bg-black/5"
+              >
+                Download MP4
+              </a>
+            )}
           </div>
-          {!recording.processing && (
-            <a
-              href={mp4DownloadUrl(slug)}
-              className="rounded-full border border-black/15 px-5 py-2.5 text-sm font-medium transition hover:bg-black/5"
-            >
-              Download MP4
-            </a>
-          )}
-        </div>
+        )}
       </main>
 
       <footer className="border-t border-black/5 py-6 text-center text-xs text-muted">

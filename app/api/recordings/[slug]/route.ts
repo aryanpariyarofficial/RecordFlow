@@ -4,6 +4,7 @@ import {
   updateRecording,
 } from "@/lib/db";
 import { deleteVideoAsset } from "@/lib/cloudinary-server";
+import { hashPassword } from "@/lib/passwords";
 import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { getUser } from "@/lib/supabase/server";
 
@@ -52,7 +53,13 @@ export async function PATCH(
   }
   const auth = await authorize(slug);
   if (!auth.ok) return auth.response;
-  let body: { title?: unknown; status?: unknown; durationSeconds?: unknown };
+  let body: {
+    title?: unknown;
+    status?: unknown;
+    durationSeconds?: unknown;
+    password?: unknown;
+    expiresInDays?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -63,6 +70,8 @@ export async function PATCH(
     title: string;
     status: "processing" | "ready";
     duration_seconds: number;
+    password_hash: string | null;
+    expires_at: string | null;
   }> = {};
   if (typeof body.title === "string" && body.title.trim()) {
     fields.title = body.title.trim().slice(0, 120);
@@ -72,6 +81,26 @@ export async function PATCH(
   }
   if (typeof body.durationSeconds === "number" && body.durationSeconds >= 0) {
     fields.duration_seconds = body.durationSeconds;
+  }
+  // password: non-empty string sets it, empty string removes it.
+  if (typeof body.password === "string") {
+    const password = body.password.trim();
+    if (password.length > 72) {
+      return Response.json({ error: "Password too long." }, { status: 400 });
+    }
+    fields.password_hash = password ? hashPassword(password) : null;
+  }
+  // expiresInDays: positive number sets an expiry from now, null/0 clears it.
+  if (body.expiresInDays === null || body.expiresInDays === 0) {
+    fields.expires_at = null;
+  } else if (
+    typeof body.expiresInDays === "number" &&
+    body.expiresInDays > 0 &&
+    body.expiresInDays <= 365
+  ) {
+    fields.expires_at = new Date(
+      Date.now() + body.expiresInDays * 24 * 60 * 60 * 1000
+    ).toISOString();
   }
   if (Object.keys(fields).length === 0) {
     return Response.json({ error: "Nothing to update." }, { status: 400 });

@@ -155,14 +155,17 @@ export class ScreenRecorder {
     }
 
     let videoTrack: MediaStreamTrack;
-    if (options.mode === "screen-cam") {
-      this.compositor = new Compositor(this.displayStream!, this.camStream!);
-      const composited = await this.compositor.start();
-      videoTrack = composited.getVideoTracks()[0];
-    } else if (options.mode === "camera") {
+    if (options.mode === "camera") {
       videoTrack = this.camStream!.getVideoTracks()[0];
     } else {
-      videoTrack = this.displayStream!.getVideoTracks()[0];
+      // Both screen modes go through the compositor so live annotation
+      // (and the bubble, when a camera is present) land in the recording.
+      this.compositor = new Compositor(
+        this.displayStream!,
+        options.mode === "screen-cam" ? this.camStream : null
+      );
+      const composited = await this.compositor.start();
+      videoTrack = composited.getVideoTracks()[0];
     }
 
     const tracks: MediaStreamTrack[] = [videoTrack];

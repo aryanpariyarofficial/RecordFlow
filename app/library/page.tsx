@@ -112,6 +112,8 @@ export default async function LibraryPage() {
                 durationSeconds={recording.duration_seconds}
                 views={recording.views}
                 processing={recording.status === "processing"}
+                hasPassword={Boolean(recording.password_hash)}
+                expiresAt={recording.expires_at}
                 thumbnail={thumbnailUrl(recording.slug)}
               />
             ))}

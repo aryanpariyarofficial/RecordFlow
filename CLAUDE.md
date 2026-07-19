@@ -5,6 +5,23 @@ stop, and get a local download (Phase 1) or a shareable link (Phase 2+).
 
 ## Current phase
 
+**Phase 4 — Protection, drawing, engagement** ✅ implemented
+- Password-protected links: scrypt hashes in `recordings.password_hash`;
+  unlock via `/api/recordings/[slug]/unlock` (tightly rate-limited) sets an
+  HttpOnly HMAC cookie bound to slug+hash (`lib/passwords.ts`). Page-level
+  gate only — the raw CDN URL stays unguessable-but-public (documented
+  tradeoff; real URL signing would need Cloudinary auth features).
+- Expiring links: `expires_at`; viewer shows an expired panel. Owner UI under
+  "Protect" on library cards (password set/remove + 1/7/30-day expiry).
+- Drawing/annotation: pen layer in the Compositor, composited into the
+  recording; screen-only mode now also routes through the Compositor so
+  drawing works there too. Click highlighting is NOT feasible in a pure web
+  app (no cursor events outside our tab) — needs the future desktop wrapper.
+- Reactions (fixed emoji set in `lib/engagement.ts`) + timestamped comments
+  (`comments`/`reactions` tables, cascade on recording delete); viewer player
+  is now the client component `components/viewer-player.tsx` with seek-on-
+  timestamp. No moderation UI yet.
+
 **Polish — landing page, SEO, security headers** ✅ implemented
 Professional homepage (hero + recorder, how-it-works, feature grid, CTA band,
 footer). SEO: full metadata + metadataBase, generated OG image

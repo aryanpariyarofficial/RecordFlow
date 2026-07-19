@@ -20,9 +20,35 @@ create table if not exists public.recordings (
 alter table public.recordings
   add column if not exists status text not null default 'ready';
 
+-- Phase 4: link protection.
+alter table public.recordings add column if not exists password_hash text;
+alter table public.recordings add column if not exists expires_at timestamptz;
+
+-- Phase 4: viewer engagement.
+create table if not exists public.comments (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null references public.recordings (slug) on delete cascade,
+  author text not null default 'Anonymous',
+  body text not null,
+  at_seconds double precision,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.reactions (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null references public.recordings (slug) on delete cascade,
+  emoji text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists comments_slug_idx on public.comments (slug);
+create index if not exists reactions_slug_idx on public.reactions (slug);
+
 -- RLS on with no policies: the browser (anon key) can read/write nothing.
 -- Our server routes use the service-role key, which bypasses RLS.
 alter table public.recordings enable row level security;
+alter table public.comments enable row level security;
+alter table public.reactions enable row level security;
 
 -- Atomic view counter.
 create or replace function public.increment_views(p_slug text)
