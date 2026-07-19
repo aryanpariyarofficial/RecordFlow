@@ -5,6 +5,19 @@ stop, and get a local download (Phase 1) or a shareable link (Phase 2+).
 
 ## Current phase
 
+**Phase 3 (minus auth) — Library, metadata, view counts** ✅ implemented
+Supabase `recordings` table (schema in `supabase/schema.sql` — must be run
+once in the Supabase SQL Editor) stores slug/title/duration/size/views with a
+nullable `user_id` for later. Upload persists metadata via `POST
+/api/recordings`; `/library` shows a grid with Cloudinary thumbnails,
+rename/delete, view counts, and a Cloudinary credits meter; viewer pages count
+views (3s dwell) and read from Supabase with Cloudinary Admin API fallback.
+
+**Product rule:** guests = record + local download only. Upload + share links
+will require login. Auth is deliberately built LAST (user decision) — until
+then uploads stay open and management routes are unauthenticated (documented
+in code); gate them by user when auth ships.
+
 **Phase 2 — Webcam bubble + share links** ✅ implemented
 Three modes (screen / screen + cam bubble / camera-only), draggable + resizable
 bubble via canvas compositing (`lib/compositor.ts`, Worker-driven draw loop so

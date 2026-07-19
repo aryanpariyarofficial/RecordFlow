@@ -142,6 +142,20 @@ export async function uploadRecording(
     throw new Error("Upload did not complete. Your local copy is safe.");
   }
 
+  // Persist metadata for the library and view counts. Best-effort: the
+  // viewer page can still resolve the video from Cloudinary alone.
+  await fetch("/api/recordings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      slug,
+      title: safeTitle,
+      durationSeconds:
+        typeof response.duration === "number" ? response.duration : null,
+      sizeBytes: total,
+    }),
+  }).catch(() => {});
+
   options.onProgress?.(1);
   return { slug, viewerPath: `/v/${slug}` };
 }

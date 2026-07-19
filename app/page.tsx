@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Recorder } from "@/components/recorder";
 
 export default function Home() {
@@ -12,9 +13,17 @@ export default function Home() {
             RecordFlow
           </span>
         </div>
-        <span className="rounded-full border border-black/10 px-3 py-1 text-xs font-medium text-muted">
-          Phase 2 · Beta
-        </span>
+        <nav className="flex items-center gap-4">
+          <Link
+            href="/library"
+            className="text-sm font-medium text-muted transition hover:text-ink"
+          >
+            Library
+          </Link>
+          <span className="rounded-full border border-black/10 px-3 py-1 text-xs font-medium text-muted">
+            Beta
+          </span>
+        </nav>
       </header>
 
       <main className="flex flex-1 flex-col items-center px-6 pb-20">
