@@ -1,0 +1,265 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { isRecordingSupported, RecordingQuality } from "@/lib/recorder";
+import { useRecorder } from "./use-recorder";
+
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1_000_000_000) return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  return `${Math.round(bytes / 1000)} KB`;
+}
+
+function downloadFileName(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `recordflow-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(
+    now.getDate()
+  )}-${pad(now.getHours())}${pad(now.getMinutes())}.webm`;
+}
+
+export function Recorder() {
+  const {
+    status,
+    countdown,
+    elapsedMs,
+    result,
+    error,
+    start,
+    cancelCountdown,
+    pause,
+    resume,
+    stop,
+    reset,
+  } = useRecorder();
+
+  const [quality, setQuality] = useState<RecordingQuality>("720p");
+  const [micEnabled, setMicEnabled] = useState(true);
+  const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
+  const [supported, setSupported] = useState(true);
+
+  useEffect(() => {
+    setSupported(isRecordingSupported());
+  }, []);
+
+  if (!supported) {
+    return (
+      <div className="mx-auto max-w-lg rounded-2xl border border-black/10 bg-white p-8 text-center shadow-sm">
+        <h2 className="text-xl font-bold">Browser not supported</h2>
+        <p className="mt-3 text-muted">
+          This browser doesn&apos;t support screen recording. Please use Chrome,
+          Edge, or Brave for the full experience.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-2xl">
+      {/* Countdown overlay */}
+      {status === "countdown" && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-ink/90 backdrop-blur-sm">
+          <span
+            key={countdown}
+            className="font-heading text-[10rem] font-extrabold leading-none text-white"
+          >
+            {countdown}
+          </span>
+          <p className="mt-2 text-lg text-white/70">Recording starts soon…</p>
+          <button
+            onClick={cancelCountdown}
+            className="mt-8 rounded-full border border-white/30 px-6 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-6 rounded-xl border border-primary/30 bg-primary/5 px-5 py-4 text-sm text-ink">
+          {error}
+        </div>
+      )}
+
+      {(status === "idle" || status === "countdown") && (
+        <div className="rounded-3xl border border-black/10 bg-white p-8 shadow-sm sm:p-10">
+          <div className="flex flex-col gap-6">
+            {/* Quality toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold">Resolution</p>
+                <p className="text-sm text-muted">
+                  720p keeps files small; 1080p for crisp detail.
+                </p>
+              </div>
+              <div className="flex rounded-full border border-black/10 p-1">
+                {(["720p", "1080p"] as const).map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => setQuality(option)}
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                      quality === option
+                        ? "bg-ink text-white"
+                        : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Mic toggle */}
+            <ToggleRow
+              label="Microphone"
+              description="Narrate over your recording."
+              checked={micEnabled}
+              onChange={setMicEnabled}
+            />
+
+            {/* System audio toggle */}
+            <ToggleRow
+              label="Tab / system audio"
+              description="Capture sound playing on your screen (tab shares work best)."
+              checked={systemAudioEnabled}
+              onChange={setSystemAudioEnabled}
+            />
+
+            <button
+              onClick={() => start({ quality, micEnabled, systemAudioEnabled })}
+              className="group mt-2 flex items-center justify-center gap-3 rounded-full bg-primary px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-primary/25 transition hover:brightness-110 active:scale-[0.99]"
+            >
+              <span className="relative flex h-3.5 w-3.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-60 group-hover:opacity-90" />
+                <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-white" />
+              </span>
+              Start recording
+            </button>
+            <p className="text-center text-xs text-muted">
+              You&apos;ll pick a tab, window, or screen — then a 3-second
+              countdown begins.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {(status === "recording" || status === "paused") && (
+        <div className="rounded-3xl border border-black/10 bg-white p-8 shadow-sm sm:p-10">
+          <div className="flex flex-col items-center gap-8">
+            <div className="flex items-center gap-3">
+              <span
+                className={`h-3 w-3 rounded-full ${
+                  status === "recording"
+                    ? "animate-pulse bg-primary"
+                    : "bg-muted"
+                }`}
+              />
+              <span className="font-heading text-5xl font-bold tabular-nums tracking-tight">
+                {formatTime(elapsedMs)}
+              </span>
+            </div>
+            <p className="text-sm text-muted">
+              {status === "recording" ? "Recording in progress" : "Paused"}
+            </p>
+            <div className="flex items-center gap-4">
+              {status === "recording" ? (
+                <button
+                  onClick={pause}
+                  className="rounded-full border border-black/15 px-7 py-3 font-medium transition hover:bg-black/5"
+                >
+                  Pause
+                </button>
+              ) : (
+                <button
+                  onClick={resume}
+                  className="rounded-full border border-black/15 px-7 py-3 font-medium transition hover:bg-black/5"
+                >
+                  Resume
+                </button>
+              )}
+              <button
+                onClick={() => void stop()}
+                className="rounded-full bg-ink px-7 py-3 font-semibold text-white transition hover:bg-ink/85"
+              >
+                Stop &amp; preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {status === "finished" && result && (
+        <div className="rounded-3xl border border-black/10 bg-white p-6 shadow-sm sm:p-8">
+          <h2 className="text-2xl font-bold">Your recording</h2>
+          <p className="mt-1 text-sm text-muted">
+            {formatTime(elapsedMs)} · {formatSize(result.sizeBytes)} · WebM
+          </p>
+          <video
+            src={result.url}
+            controls
+            playsInline
+            className="mt-5 w-full rounded-xl border border-black/10 bg-ink"
+          />
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <a
+              href={result.url}
+              download={downloadFileName()}
+              className="flex-1 rounded-full bg-secondary px-6 py-3.5 text-center font-semibold text-white shadow-lg shadow-secondary/25 transition hover:brightness-110"
+            >
+              Download video
+            </a>
+            <button
+              onClick={reset}
+              className="flex-1 rounded-full border border-black/15 px-6 py-3.5 font-medium transition hover:bg-black/5"
+            >
+              New recording
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ToggleRow({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="font-semibold">{label}</p>
+        <p className="text-sm text-muted">{description}</p>
+      </div>
+      <button
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+          checked ? "bg-secondary" : "bg-black/15"
+        }`}
+      >
+        <span
+          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            checked ? "translate-x-6" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}

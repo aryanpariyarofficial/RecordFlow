@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-heading: var(--font-syne), sans-serif;
+  --font-body: var(--font-dm-sans), sans-serif;
+
+  --color-primary: #ff009d;
+  --color-secondary: #5501fe;
+  --color-ink: #0f0f0f;
+  --color-muted: #6c6a72;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: #fafafa;
+  color: var(--color-ink);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
+}
