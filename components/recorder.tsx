@@ -16,6 +16,7 @@ import { useRecorder } from "./use-recorder";
 import { useUser } from "./use-user";
 import { UploadPanel } from "./upload-panel";
 import { LocalHistory } from "./local-history";
+import { FloatingTools } from "./floating-tools";
 
 const MODES: { id: RecordingMode; label: string; hint: string }[] = [
   { id: "screen", label: "Screen", hint: "Just your screen" },
@@ -271,7 +272,21 @@ export function Recorder() {
           <div className="flex flex-col gap-6">
             {/* Live preview: composited canvas or camera feed */}
             {engine?.compositor && (
-              <CompositePreview compositor={engine.compositor} />
+              <>
+                <CompositePreview compositor={engine.compositor} />
+                <FloatingTools
+                  compositor={engine.compositor}
+                  camStream={engine.cameraPreviewStream}
+                  status={status}
+                  elapsedMs={elapsedMs}
+                  micEnabled={micEnabled}
+                  micMuted={micMuted}
+                  onPause={pause}
+                  onResume={resume}
+                  onStop={() => void stop()}
+                  onToggleMic={toggleMicMuted}
+                />
+              </>
             )}
             {!engine?.compositor && engine?.cameraPreviewStream && (
               <CameraPreview stream={engine.cameraPreviewStream} />
