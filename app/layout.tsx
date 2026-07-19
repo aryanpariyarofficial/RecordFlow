@@ -12,10 +12,44 @@ const dmSans = DM_Sans({
   variable: "--font-dm-sans",
 });
 
+const SITE_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://recordflow-delta.vercel.app";
+
 export const metadata: Metadata = {
-  title: "RecordFlow — Screen recorder",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "RecordFlow — Record your screen, share in seconds",
+    template: "%s — RecordFlow",
+  },
   description:
-    "Record your screen with mic audio and share it — a fast, browser-based Loom alternative.",
+    "Free browser screen recorder with webcam bubble, mic narration, and instant share links. No installs, no watermarks — a fast Loom alternative.",
+  keywords: [
+    "screen recorder",
+    "free screen recorder",
+    "browser screen recording",
+    "loom alternative",
+    "screen and webcam recorder",
+    "share screen recording link",
+  ],
+  applicationName: "RecordFlow",
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "RecordFlow",
+    title: "RecordFlow — Record your screen, share in seconds",
+    description:
+      "Free browser screen recorder with webcam bubble and instant share links. No installs, no watermarks.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RecordFlow — Record your screen, share in seconds",
+    description:
+      "Free browser screen recorder with webcam bubble and instant share links.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default function RootLayout({

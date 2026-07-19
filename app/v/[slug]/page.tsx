@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getRecordingBySlug } from "@/lib/db";
-import { mp4DownloadUrl, videoUrl } from "@/lib/cloudinary-urls";
+import { mp4DownloadUrl, thumbnailUrl, videoUrl } from "@/lib/cloudinary-urls";
 import { formatDate, formatDuration, formatSize } from "@/lib/format";
 import { ViewTracker } from "@/components/view-tracker";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -74,9 +74,21 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const recording = await getRecording(slug);
+  const title = recording?.title ?? "Recording";
   return {
-    title: `${recording?.title ?? "Recording"} — RecordFlow`,
+    title,
     description: "Watch this screen recording on RecordFlow.",
+    // Unlisted: anyone with the link can watch, but search engines stay out.
+    robots: { index: false, follow: false },
+    openGraph: {
+      title: `${title} — RecordFlow`,
+      description: "Watch this screen recording on RecordFlow.",
+      type: "video.other",
+      ...(recording && !recording.processing
+        ? { images: [{ url: thumbnailUrl(slug), width: 640, height: 360 }] }
+        : {}),
+    },
+    twitter: { card: "summary_large_image" },
   };
 }
 

@@ -5,6 +5,17 @@ stop, and get a local download (Phase 1) or a shareable link (Phase 2+).
 
 ## Current phase
 
+**Polish — landing page, SEO, security headers** ✅ implemented
+Professional homepage (hero + recorder, how-it-works, feature grid, CTA band,
+footer). SEO: full metadata + metadataBase, generated OG image
+(`app/opengraph-image.tsx` via next/og), robots.ts (viewer/library/api
+disallowed), sitemap.ts; viewer pages are noindex with Cloudinary thumbnail
+og:image for rich link previews. Security: CSP allowlist (Cloudinary +
+Supabase only), nosniff, frame-ancestors/X-Frame-Options, Referrer-Policy,
+Permissions-Policy (camera/mic/display-capture self-only), HSTS,
+poweredByHeader off — all in `next.config.ts`. Set `NEXT_PUBLIC_APP_URL` when
+the domain changes.
+
 **Auth — Supabase login + freemium gating** ✅ implemented
 Email+password auth via @supabase/ssr (cookie sessions, refreshed in
 `middleware.ts`). `/login` handles sign in/up; `/auth/confirm` handles email
