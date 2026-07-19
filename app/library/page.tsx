@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { listRecordings } from "@/lib/db";
+import { getWatchStats, listRecordings } from "@/lib/db";
 import { getUsage } from "@/lib/cloudinary-server";
 import { thumbnailUrl } from "@/lib/cloudinary-urls";
 import { getUser } from "@/lib/supabase/server";
@@ -22,6 +22,9 @@ export default async function LibraryPage() {
     listRecordings(user.id),
     getUsage(),
   ]);
+  const watchStats = recordings
+    ? await getWatchStats(recordings.map((r) => r.slug))
+    : {};
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -114,6 +117,8 @@ export default async function LibraryPage() {
                 processing={recording.status === "processing"}
                 hasPassword={Boolean(recording.password_hash)}
                 expiresAt={recording.expires_at}
+                plays={watchStats[recording.slug]?.plays ?? 0}
+                avgWatchPercent={watchStats[recording.slug]?.avgPercent ?? null}
                 thumbnail={thumbnailUrl(recording.slug)}
               />
             ))}

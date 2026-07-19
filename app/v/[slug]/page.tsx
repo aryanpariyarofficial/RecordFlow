@@ -6,6 +6,7 @@ import { getRecordingBySlug } from "@/lib/db";
 import { mp4DownloadUrl, thumbnailUrl, videoUrl } from "@/lib/cloudinary-urls";
 import { formatDate, formatDuration, formatSize } from "@/lib/format";
 import { isUnlockCookieValid, unlockCookieName } from "@/lib/passwords";
+import { getUser } from "@/lib/supabase/server";
 import { ViewTracker } from "@/components/view-tracker";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { PasswordGate } from "@/components/password-gate";
@@ -23,6 +24,7 @@ interface RecordingView {
   processing: boolean;
   expired: boolean;
   locked: boolean;
+  ownerId: string | null;
 }
 
 async function fromCloudinary(slug: string): Promise<RecordingView | null> {
@@ -52,6 +54,7 @@ async function fromCloudinary(slug: string): Promise<RecordingView | null> {
     processing: false,
     expired: false,
     locked: false,
+    ownerId: null,
   };
 }
 
@@ -79,6 +82,7 @@ async function getRecording(slug: string): Promise<RecordingView | null> {
       processing: row.status === "processing",
       expired: row.expires_at ? new Date(row.expires_at) < new Date() : false,
       locked,
+      ownerId: row.user_id,
     };
   }
   // Recordings uploaded before the database existed (or if the metadata
@@ -143,6 +147,13 @@ export default async function ViewerPage({
   const watchable =
     !recording.processing && !recording.expired && !recording.locked;
 
+  // Owner can moderate comments; legacy null-owner rows belong to any
+  // signed-in user (only the account owner existed pre-auth).
+  const user = watchable ? await getUser() : null;
+  const isOwner = Boolean(
+    user && (recording.ownerId === user.id || recording.ownerId === null)
+  );
+
   return (
     <div className="flex min-h-screen flex-col">
       {watchable && <ViewTracker slug={slug} />}
@@ -188,7 +199,7 @@ export default async function ViewerPage({
             />
           </>
         ) : (
-          <ViewerPlayer slug={slug} url={recording.url} />
+          <ViewerPlayer slug={slug} url={recording.url} isOwner={isOwner} />
         )}
 
         {!recording.expired && !recording.locked && (

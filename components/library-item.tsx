@@ -24,6 +24,8 @@ export function LibraryItem({
   processing,
   hasPassword,
   expiresAt,
+  plays,
+  avgWatchPercent,
   thumbnail,
 }: {
   slug: string;
@@ -34,6 +36,8 @@ export function LibraryItem({
   processing: boolean;
   hasPassword: boolean;
   expiresAt: string | null;
+  plays: number;
+  avgWatchPercent: number | null;
   thumbnail: string;
 }) {
   const router = useRouter();
@@ -240,6 +244,13 @@ export function LibraryItem({
             ` · ${formatDuration(durationSeconds)}`}
           {` · ${views} view${views === 1 ? "" : "s"}`}
         </p>
+        {plays > 0 && (
+          <p className="mt-1 text-xs font-medium text-secondary">
+            ▶ {plays} play{plays === 1 ? "" : "s"}
+            {typeof avgWatchPercent === "number" &&
+              ` · ${avgWatchPercent}% watched on average`}
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
           <button
             onClick={copyLink}

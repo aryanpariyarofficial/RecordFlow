@@ -12,8 +12,17 @@ interface Comment {
   createdAt: string;
 }
 
-/** Video player with emoji reactions and timestamped comments. */
-export function ViewerPlayer({ slug, url }: { slug: string; url: string }) {
+/** Video player with emoji reactions, timestamped comments, and
+ * anonymous watch-progress beacons for owner analytics. */
+export function ViewerPlayer({
+  slug,
+  url,
+  isOwner = false,
+}: {
+  slug: string;
+  url: string;
+  isOwner?: boolean;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [reacted, setReacted] = useState<string | null>(null);
@@ -23,6 +32,47 @@ export function ViewerPlayer({ slug, url }: { slug: string; url: string }) {
   const [atCurrentTime, setAtCurrentTime] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const maxWatchedRef = useRef(0);
+  const lastSentRef = useRef(0);
+
+  // Watch-through beacons: furthest point reached, every 10s + on leave.
+  useEffect(() => {
+    const send = (useBeacon: boolean) => {
+      const seconds = maxWatchedRef.current;
+      if (seconds < 1 || seconds - lastSentRef.current < 1) return;
+      lastSentRef.current = seconds;
+      const payload = JSON.stringify({
+        sessionId,
+        seconds,
+        duration: videoRef.current?.duration || null,
+      });
+      const endpoint = `/api/recordings/${slug}/watch`;
+      if (useBeacon && navigator.sendBeacon) {
+        navigator.sendBeacon(
+          endpoint,
+          new Blob([payload], { type: "application/json" })
+        );
+      } else {
+        fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+    const interval = setInterval(() => send(false), 10_000);
+    const onHide = () => send(true);
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onHide);
+      send(true);
+    };
+  }, [slug, sessionId]);
 
   useEffect(() => {
     fetch(`/api/recordings/${slug}/reactions`)
@@ -85,6 +135,12 @@ export function ViewerPlayer({ slug, url }: { slug: string; url: string }) {
         src={url}
         controls
         playsInline
+        onTimeUpdate={(e) => {
+          maxWatchedRef.current = Math.max(
+            maxWatchedRef.current,
+            e.currentTarget.currentTime
+          );
+        }}
         className="mt-4 w-full rounded-2xl border border-black/10 bg-ink shadow-sm"
       />
 
@@ -179,6 +235,25 @@ export function ViewerPlayer({ slug, url }: { slug: string; url: string }) {
                       day: "numeric",
                     })}
                   </span>
+                  {isOwner && (
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm("Delete this comment?")) return;
+                        const res = await fetch(
+                          `/api/recordings/${slug}/comments/${comment.id}`,
+                          { method: "DELETE" }
+                        ).catch(() => null);
+                        if (res?.ok) {
+                          setComments((prev) =>
+                            prev.filter((c) => c.id !== comment.id)
+                          );
+                        }
+                      }}
+                      className="ml-auto text-xs font-medium text-muted transition hover:text-primary"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
                 <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed">
                   {comment.body}

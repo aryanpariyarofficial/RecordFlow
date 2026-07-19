@@ -44,11 +44,43 @@ create table if not exists public.reactions (
 create index if not exists comments_slug_idx on public.comments (slug);
 create index if not exists reactions_slug_idx on public.reactions (slug);
 
+-- Watch-through analytics: one row per anonymous viewing session,
+-- holding the furthest point reached.
+create table if not exists public.watch_progress (
+  session_id uuid primary key,
+  slug text not null references public.recordings (slug) on delete cascade,
+  seconds double precision not null default 0,
+  video_duration double precision,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists watch_progress_slug_idx on public.watch_progress (slug);
+
+create or replace function public.record_watch(
+  p_session uuid,
+  p_slug text,
+  p_seconds double precision,
+  p_duration double precision
+)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.watch_progress (session_id, slug, seconds, video_duration)
+  values (p_session, p_slug, p_seconds, p_duration)
+  on conflict (session_id) do update
+    set seconds = greatest(public.watch_progress.seconds, excluded.seconds),
+        video_duration = coalesce(excluded.video_duration, public.watch_progress.video_duration),
+        updated_at = now();
+$$;
+
 -- RLS on with no policies: the browser (anon key) can read/write nothing.
 -- Our server routes use the service-role key, which bypasses RLS.
 alter table public.recordings enable row level security;
 alter table public.comments enable row level security;
 alter table public.reactions enable row level security;
+alter table public.watch_progress enable row level security;
 
 -- Atomic view counter.
 create or replace function public.increment_views(p_slug text)

@@ -5,6 +5,21 @@ stop, and get a local download (Phase 1) or a shareable link (Phase 2+).
 
 ## Current phase
 
+**Phase 5 (free tier) — Watch analytics + moderation + floating tools** ✅
+- Watch-through analytics: viewer player sends anonymous progress beacons
+  (session UUID, furthest second, every 10s + sendBeacon on leave) to
+  `/api/recordings/[slug]/watch` → `watch_progress` table via `record_watch`
+  RPC (upsert, greatest-wins). Library cards show plays + avg % watched.
+- Comment moderation: owners see Delete on comments (`isOwner` from viewer
+  page; DELETE `/api/recordings/[slug]/comments/[id]`, owner-checked).
+- Floating tools (`components/floating-tools.tsx`): Document PiP window
+  (Chrome/Edge 116+) with drawable live mirror + controls, always on top of
+  every app; classic video PiP self-view. Both auto-close on stop.
+- Constraint: user is on FREE TIER ONLY — no paid APIs. Transcripts/AI wait
+  for an OpenAI key OR go the free route (transformers.js Whisper
+  in-browser). Desktop wrapper (Tauri, free) awaits explicit go-ahead —
+  requires installing Rust locally.
+
 **Phase 4 — Protection, drawing, engagement** ✅ implemented
 - Password-protected links: scrypt hashes in `recordings.password_hash`;
   unlock via `/api/recordings/[slug]/unlock` (tightly rate-limited) sets an

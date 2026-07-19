@@ -170,3 +170,75 @@ export async function addReaction(
   const { error } = await db.from("reactions").insert({ slug, emoji });
   return !error;
 }
+
+export async function deleteComment(
+  id: string,
+  slug: string
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) return false;
+  const { error } = await db
+    .from("comments")
+    .delete()
+    .eq("id", id)
+    .eq("slug", slug);
+  return !error;
+}
+
+export async function recordWatch(
+  sessionId: string,
+  slug: string,
+  seconds: number,
+  duration: number | null
+): Promise<void> {
+  const db = getDb();
+  if (!db) return;
+  await db.rpc("record_watch", {
+    p_session: sessionId,
+    p_slug: slug,
+    p_seconds: seconds,
+    p_duration: duration,
+  });
+}
+
+export interface WatchStats {
+  plays: number;
+  /** 0–100, average of per-session watched fraction; null if unknown. */
+  avgPercent: number | null;
+}
+
+export async function getWatchStats(
+  slugs: string[]
+): Promise<Record<string, WatchStats>> {
+  const db = getDb();
+  const stats: Record<string, WatchStats> = {};
+  if (!db || slugs.length === 0) return stats;
+  const { data } = await db
+    .from("watch_progress")
+    .select("slug, seconds, video_duration")
+    .in("slug", slugs)
+    .limit(10000);
+  for (const row of (data as {
+    slug: string;
+    seconds: number;
+    video_duration: number | null;
+  }[]) ?? []) {
+    const entry = (stats[row.slug] ??= { plays: 0, avgPercent: 0 });
+    entry.plays += 1;
+    const fraction =
+      row.video_duration && row.video_duration > 0
+        ? Math.min(1, row.seconds / row.video_duration)
+        : null;
+    if (fraction === null) {
+      entry.avgPercent = entry.avgPercent ?? null;
+    } else {
+      entry.avgPercent = (entry.avgPercent ?? 0) + fraction * 100;
+    }
+  }
+  for (const entry of Object.values(stats)) {
+    if (entry.avgPercent !== null && entry.plays > 0) {
+      entry.avgPercent = Math.round(entry.avgPercent / entry.plays);
+    }
+  }
+  return stats;
+}
