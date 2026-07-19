@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { listRecordings } from "@/lib/db";
-import { getUsage, thumbnailUrl } from "@/lib/cloudinary-server";
+import { getUsage } from "@/lib/cloudinary-server";
+import { thumbnailUrl } from "@/lib/cloudinary-urls";
 import { LibraryItem } from "@/components/library-item";
 
 export const dynamic = "force-dynamic";
@@ -102,6 +103,7 @@ export default async function LibraryPage() {
                 createdAt={recording.created_at}
                 durationSeconds={recording.duration_seconds}
                 views={recording.views}
+                processing={recording.status === "processing"}
                 thumbnail={thumbnailUrl(recording.slug)}
               />
             ))}

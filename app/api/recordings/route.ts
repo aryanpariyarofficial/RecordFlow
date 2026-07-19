@@ -1,14 +1,23 @@
 import { insertRecording } from "@/lib/db";
+import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 const SLUG_RE = /^[a-z0-9]{8,24}$/;
 
-/** Persist recording metadata after a successful Cloudinary upload. */
+/**
+ * Persist recording metadata. Called with status "processing" when an
+ * instant link is created at upload start, or "ready" for direct saves.
+ */
 export async function POST(request: Request) {
+  if (!rateLimit(`recordings:${clientIp(request)}`, 20, 60 * 60 * 1000)) {
+    return tooManyRequests();
+  }
+
   let body: {
     slug?: unknown;
     title?: unknown;
     durationSeconds?: unknown;
     sizeBytes?: unknown;
+    status?: unknown;
   };
   try {
     body = await request.json();
@@ -23,6 +32,7 @@ export async function POST(request: Request) {
     typeof body.title === "string" && body.title.trim()
       ? body.title.trim().slice(0, 120)
       : "Untitled recording";
+  const status = body.status === "processing" ? "processing" : "ready";
 
   const ok = await insertRecording({
     slug: body.slug,
@@ -30,6 +40,7 @@ export async function POST(request: Request) {
     duration_seconds:
       typeof body.durationSeconds === "number" ? body.durationSeconds : null,
     size_bytes: typeof body.sizeBytes === "number" ? body.sizeBytes : null,
+    status,
   });
 
   if (!ok) {

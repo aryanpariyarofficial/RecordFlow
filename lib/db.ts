@@ -5,6 +5,8 @@
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
+export type RecordingStatus = "processing" | "ready";
+
 export interface RecordingRow {
   id: string;
   slug: string;
@@ -12,6 +14,7 @@ export interface RecordingRow {
   duration_seconds: number | null;
   size_bytes: number | null;
   views: number;
+  status: RecordingStatus;
   user_id: string | null;
   created_at: string;
 }
@@ -35,10 +38,25 @@ export async function insertRecording(row: {
   title: string;
   duration_seconds: number | null;
   size_bytes: number | null;
+  status: RecordingStatus;
 }): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
   const { error } = await db.from("recordings").insert(row);
+  return !error;
+}
+
+export async function updateRecording(
+  slug: string,
+  fields: Partial<{
+    title: string;
+    status: RecordingStatus;
+    duration_seconds: number;
+  }>
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) return false;
+  const { error } = await db.from("recordings").update(fields).eq("slug", slug);
   return !error;
 }
 
@@ -65,19 +83,6 @@ export async function listRecordings(): Promise<RecordingRow[] | null> {
   // error (e.g. table not created yet) is distinguished from an empty library.
   if (error) return null;
   return (data as RecordingRow[]) ?? [];
-}
-
-export async function renameRecording(
-  slug: string,
-  title: string
-): Promise<boolean> {
-  const db = getDb();
-  if (!db) return false;
-  const { error } = await db
-    .from("recordings")
-    .update({ title })
-    .eq("slug", slug);
-  return !error;
 }
 
 export async function deleteRecordingRow(slug: string): Promise<boolean> {

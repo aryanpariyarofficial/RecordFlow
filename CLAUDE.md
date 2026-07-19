@@ -5,6 +5,21 @@ stop, and get a local download (Phase 1) or a shareable link (Phase 2+).
 
 ## Current phase
 
+**Phase 3.5 — Instant links, local history, limits, MP4/trim** ✅ implemented
+- Instant links: `startUpload()` registers a `processing` row + returns the
+  share link immediately; upload completes in background; viewer page shows a
+  spinner and auto-refreshes until `ready`. Failed uploads delete the row.
+- Local history: every finished recording auto-saves to IndexedDB
+  (`lib/local-history.ts`, newest 10 kept); "On this device" list on home.
+- Duration cap: 30-min auto-stop (`MAX_RECORDING_MS`); `GUEST_MAX_RECORDING_MS`
+  (5 min) activates for guests when auth ships.
+- Rate limiting: in-memory sliding window (`lib/rate-limit.ts`) on sign,
+  recordings, and view routes — per-instance only; swap for a shared store
+  if abuse appears.
+- MP4 download (viewer + library) and non-destructive trim-to-MP4 downloads
+  via Cloudinary `so_/eo_/fl_attachment` transformations
+  (`lib/cloudinary-urls.ts`).
+
 **Phase 3 (minus auth) — Library, metadata, view counts** ✅ implemented
 Supabase `recordings` table (schema in `supabase/schema.sql` — must be run
 once in the Supabase SQL Editor) stores slug/title/duration/size/views with a

@@ -17,17 +17,6 @@ function credentials(): {
   };
 }
 
-export function videoUrl(slug: string): string {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  return `https://res.cloudinary.com/${cloudName}/video/upload/recordflow/${slug}.webm`;
-}
-
-export function thumbnailUrl(slug: string): string {
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  // Frame at 1s, cropped to 16:9 JPEG.
-  return `https://res.cloudinary.com/${cloudName}/video/upload/so_1,w_640,h_360,c_fill/recordflow/${slug}.jpg`;
-}
-
 export async function deleteVideoAsset(slug: string): Promise<boolean> {
   const creds = credentials();
   if (!creds) return false;

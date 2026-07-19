@@ -4,13 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { BubbleSize, Compositor } from "@/lib/compositor";
 import {
   isRecordingSupported,
+  MAX_RECORDING_MS,
   RecordingMode,
   RecordingQuality,
 } from "@/lib/recorder";
 import { formatSize, formatTime } from "@/lib/format";
+import { saveLocalRecording } from "@/lib/local-history";
 import { deviceLabel, useMediaDevices } from "./use-devices";
 import { useRecorder } from "./use-recorder";
 import { UploadPanel } from "./upload-panel";
+import { LocalHistory } from "./local-history";
 
 const MODES: { id: RecordingMode; label: string; hint: string }[] = [
   { id: "screen", label: "Screen", hint: "Just your screen" },
@@ -52,10 +55,44 @@ export function Recorder() {
   const [camDeviceId, setCamDeviceId] = useState<string>("");
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
   const [supported, setSupported] = useState(true);
+  const [historyToken, setHistoryToken] = useState(0);
+  const savedUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     setSupported(isRecordingSupported());
   }, []);
+
+  // Hard cap: auto-stop so 30+ minute sessions can't exhaust memory.
+  useEffect(() => {
+    if (status === "recording" && elapsedMs >= MAX_RECORDING_MS) {
+      void stop();
+    }
+  }, [status, elapsedMs, stop]);
+
+  // "Never lose a recording": auto-save every finished recording to
+  // IndexedDB so closing the tab doesn't destroy it.
+  useEffect(() => {
+    if (status !== "finished" || !result || savedUrlRef.current === result.url) {
+      return;
+    }
+    savedUrlRef.current = result.url;
+    saveLocalRecording({
+      id: crypto.randomUUID(),
+      title: `Recording — ${new Date().toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })}`,
+      createdAt: Date.now(),
+      durationMs: elapsedMs,
+      sizeBytes: result.sizeBytes,
+      mimeType: result.mimeType,
+      blob: result.blob,
+    })
+      .then(() => setHistoryToken((t) => t + 1))
+      .catch(() => {});
+  }, [status, result, elapsedMs]);
 
   if (!supported) {
     return (
@@ -258,6 +295,16 @@ export function Recorder() {
               <p className="text-sm text-muted">
                 {status === "recording" ? "Recording in progress" : "Paused"}
               </p>
+              {MAX_RECORDING_MS - elapsedMs < 60_000 && (
+                <p className="rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+                  Auto-stopping in{" "}
+                  {Math.max(
+                    0,
+                    Math.ceil((MAX_RECORDING_MS - elapsedMs) / 1000)
+                  )}
+                  s — recording limit reached
+                </p>
+              )}
               <div className="flex flex-wrap items-center justify-center gap-3">
                 <button
                   onClick={toggleMicMuted}
@@ -328,6 +375,8 @@ export function Recorder() {
           </div>
         </div>
       )}
+
+      <LocalHistory refreshToken={historyToken} />
     </div>
   );
 }

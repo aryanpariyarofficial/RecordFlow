@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getRecordingBySlug } from "@/lib/db";
-import { videoUrl } from "@/lib/cloudinary-server";
+import { mp4DownloadUrl, videoUrl } from "@/lib/cloudinary-urls";
 import { formatDate, formatDuration, formatSize } from "@/lib/format";
 import { ViewTracker } from "@/components/view-tracker";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ interface RecordingView {
   durationSeconds: number | null;
   sizeBytes: number | null;
   views: number | null;
+  processing: boolean;
 }
 
 async function fromCloudinary(slug: string): Promise<RecordingView | null> {
@@ -41,6 +43,7 @@ async function fromCloudinary(slug: string): Promise<RecordingView | null> {
     durationSeconds: typeof body.duration === "number" ? body.duration : null,
     sizeBytes: body.bytes,
     views: null,
+    processing: false,
   };
 }
 
@@ -56,6 +59,7 @@ async function getRecording(slug: string): Promise<RecordingView | null> {
       durationSeconds: row.duration_seconds,
       sizeBytes: row.size_bytes,
       views: row.views,
+      processing: row.status === "processing",
     };
   }
   // Recordings uploaded before the database existed (or if the metadata
@@ -87,7 +91,7 @@ export default async function ViewerPage({
 
   return (
     <div className="flex min-h-screen flex-col">
-      <ViewTracker slug={slug} />
+      {!recording.processing && <ViewTracker slug={slug} />}
       <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-6">
         <Link href="/" className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary">
@@ -106,24 +110,52 @@ export default async function ViewerPage({
       </header>
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-6 pb-20">
-        <video
-          src={recording.url}
-          controls
-          playsInline
-          className="mt-4 w-full rounded-2xl border border-black/10 bg-ink shadow-sm"
-        />
-        <h1 className="mt-6 text-2xl font-bold sm:text-3xl">
-          {recording.title}
-        </h1>
-        <p className="mt-2 text-sm text-muted">
-          {formatDate(recording.createdAt)}
-          {typeof recording.durationSeconds === "number" &&
-            ` · ${formatDuration(recording.durationSeconds)}`}
-          {typeof recording.sizeBytes === "number" &&
-            ` · ${formatSize(recording.sizeBytes)}`}
-          {typeof recording.views === "number" &&
-            ` · ${recording.views} view${recording.views === 1 ? "" : "s"}`}
-        </p>
+        {recording.processing ? (
+          <>
+            <AutoRefresh />
+            <div className="mt-4 flex aspect-video w-full flex-col items-center justify-center rounded-2xl border border-black/10 bg-ink text-center">
+              <span className="h-10 w-10 animate-spin rounded-full border-[3px] border-white/20 border-t-primary" />
+              <p className="mt-5 font-semibold text-white">
+                This video is still uploading
+              </p>
+              <p className="mt-1 text-sm text-white/60">
+                Hang tight — the page refreshes automatically.
+              </p>
+            </div>
+          </>
+        ) : (
+          <video
+            src={recording.url}
+            controls
+            playsInline
+            className="mt-4 w-full rounded-2xl border border-black/10 bg-ink shadow-sm"
+          />
+        )}
+
+        <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold sm:text-3xl">
+              {recording.title}
+            </h1>
+            <p className="mt-2 text-sm text-muted">
+              {formatDate(recording.createdAt)}
+              {typeof recording.durationSeconds === "number" &&
+                ` · ${formatDuration(recording.durationSeconds)}`}
+              {typeof recording.sizeBytes === "number" &&
+                ` · ${formatSize(recording.sizeBytes)}`}
+              {typeof recording.views === "number" &&
+                ` · ${recording.views} view${recording.views === 1 ? "" : "s"}`}
+            </p>
+          </div>
+          {!recording.processing && (
+            <a
+              href={mp4DownloadUrl(slug)}
+              className="rounded-full border border-black/15 px-5 py-2.5 text-sm font-medium transition hover:bg-black/5"
+            >
+              Download MP4
+            </a>
+          )}
+        </div>
       </main>
 
       <footer className="border-t border-black/5 py-6 text-center text-xs text-muted">

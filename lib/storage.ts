@@ -6,13 +6,20 @@
  * the client. Files larger than one chunk use Cloudinary's chunked upload
  * protocol (X-Unique-Upload-Id + Content-Range) so 30+ minute recordings
  * upload reliably.
+ *
+ * Instant links: startUpload() registers the recording (status "processing")
+ * and returns the share link immediately; the returned `completion` promise
+ * resolves when the video is fully uploaded and marked "ready". On failure
+ * the metadata row is removed so the link 404s instead of hanging forever.
  */
 
 const CHUNK_BYTES = 20_000_000; // 20 MB — Cloudinary requires chunks >= 5 MB
 
-export interface UploadedRecording {
+export interface StartedUpload {
   slug: string;
   viewerPath: string;
+  /** Resolves when the video is fully uploaded and playable. */
+  completion: Promise<void>;
 }
 
 export function isUploadConfigured(): boolean {
@@ -83,13 +90,13 @@ function postChunk(
   });
 }
 
-export async function uploadRecording(
+export async function startUpload(
   blob: Blob,
   options: {
     title: string;
     onProgress?: (fraction: number) => void;
   }
-): Promise<UploadedRecording> {
+): Promise<StartedUpload> {
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
   if (!cloudName) throw new Error("Cloudinary is not configured.");
 
@@ -104,58 +111,79 @@ export async function uploadRecording(
 
   const { signature, apiKey } = await getSignature(publicId, timestamp, context);
 
-  const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
-  const baseFields: Record<string, string> = {
-    api_key: apiKey,
-    timestamp: String(timestamp),
-    signature,
-    public_id: publicId,
-    context,
-  };
-
-  const total = blob.size;
-  const uploadId = randomSlug(24);
-  let response: Record<string, unknown> = {};
-
-  for (let start = 0; start < total; start += CHUNK_BYTES) {
-    const end = Math.min(start + CHUNK_BYTES, total);
-    const form = new FormData();
-    for (const [name, value] of Object.entries(baseFields)) {
-      form.append(name, value);
-    }
-    form.append("file", blob.slice(start, end));
-
-    const headers: Record<string, string> =
-      total > CHUNK_BYTES
-        ? {
-            "X-Unique-Upload-Id": uploadId,
-            "Content-Range": `bytes ${start}-${end - 1}/${total}`,
-          }
-        : {};
-
-    response = await postChunk(endpoint, form, headers, (loaded) => {
-      options.onProgress?.(Math.min(1, (start + loaded) / total));
-    });
-  }
-
-  if (!response.public_id) {
-    throw new Error("Upload did not complete. Your local copy is safe.");
-  }
-
-  // Persist metadata for the library and view counts. Best-effort: the
-  // viewer page can still resolve the video from Cloudinary alone.
+  // Register the recording as "processing" so the share link works right
+  // away. Best-effort: without the DB the viewer falls back to Cloudinary.
   await fetch("/api/recordings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       slug,
       title: safeTitle,
-      durationSeconds:
-        typeof response.duration === "number" ? response.duration : null,
-      sizeBytes: total,
+      sizeBytes: blob.size,
+      status: "processing",
     }),
   }).catch(() => {});
 
-  options.onProgress?.(1);
-  return { slug, viewerPath: `/v/${slug}` };
+  const completion = (async () => {
+    try {
+      const endpoint = `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
+      const baseFields: Record<string, string> = {
+        api_key: apiKey,
+        timestamp: String(timestamp),
+        signature,
+        public_id: publicId,
+        context,
+      };
+
+      const total = blob.size;
+      const uploadId = randomSlug(24);
+      let response: Record<string, unknown> = {};
+
+      for (let start = 0; start < total; start += CHUNK_BYTES) {
+        const end = Math.min(start + CHUNK_BYTES, total);
+        const form = new FormData();
+        for (const [name, value] of Object.entries(baseFields)) {
+          form.append(name, value);
+        }
+        form.append("file", blob.slice(start, end));
+
+        const headers: Record<string, string> =
+          total > CHUNK_BYTES
+            ? {
+                "X-Unique-Upload-Id": uploadId,
+                "Content-Range": `bytes ${start}-${end - 1}/${total}`,
+              }
+            : {};
+
+        response = await postChunk(endpoint, form, headers, (loaded) => {
+          options.onProgress?.(Math.min(1, (start + loaded) / total));
+        });
+      }
+
+      if (!response.public_id) {
+        throw new Error("Upload did not complete. Your local copy is safe.");
+      }
+
+      await fetch(`/api/recordings/${slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "ready",
+          durationSeconds:
+            typeof response.duration === "number" ? response.duration : undefined,
+        }),
+      }).catch(() => {});
+
+      options.onProgress?.(1);
+    } catch (err) {
+      // Kill the link so it 404s instead of pointing at a video that will
+      // never arrive. The user's local blob is untouched.
+      await fetch(`/api/recordings/${slug}`, { method: "DELETE" }).catch(
+        () => {}
+      );
+      throw err;
+    }
+  })();
+
+  return { slug, viewerPath: `/v/${slug}`, completion };
 }

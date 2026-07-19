@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 /**
  * Signs Cloudinary upload parameters server-side so the API secret never
@@ -6,6 +7,9 @@ import { createHash } from "node:crypto";
  * with a slug-shaped public_id and a title-only context string.
  */
 export async function POST(request: Request) {
+  if (!rateLimit(`sign:${clientIp(request)}`, 20, 60 * 60 * 1000)) {
+    return tooManyRequests();
+  }
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;

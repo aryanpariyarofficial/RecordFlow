@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { isUploadConfigured, uploadRecording } from "@/lib/storage";
+import { isUploadConfigured, startUpload } from "@/lib/storage";
 
 type UploadStatus = "idle" | "uploading" | "done" | "error";
 
@@ -33,13 +33,16 @@ export function UploadPanel({ blob }: { blob: Blob }) {
     setError(null);
     setProgress(0);
     try {
-      const { viewerPath } = await uploadRecording(blob, {
+      const started = await startUpload(blob, {
         title,
         onProgress: setProgress,
       });
-      setViewerUrl(`${window.location.origin}${viewerPath}`);
+      // The link is live immediately — the video finishes in the background.
+      setViewerUrl(`${window.location.origin}${started.viewerPath}`);
+      await started.completion;
       setStatus("done");
     } catch (err) {
+      setViewerUrl(null);
       setError(
         err instanceof Error
           ? err.message
@@ -60,10 +63,15 @@ export function UploadPanel({ blob }: { blob: Blob }) {
     }
   };
 
-  if (status === "done" && viewerUrl) {
+  if (viewerUrl) {
+    const uploading = status === "uploading";
     return (
       <div className="mt-6 rounded-xl border border-secondary/25 bg-secondary/5 p-5">
-        <p className="font-semibold">Your video is live 🎉</p>
+        <p className="font-semibold">
+          {uploading
+            ? "Your link is ready — share it now 🚀"
+            : "Your video is live 🎉"}
+        </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             readOnly
@@ -86,6 +94,20 @@ export function UploadPanel({ blob }: { blob: Blob }) {
             Open
           </a>
         </div>
+        {uploading && (
+          <div className="mt-3">
+            <div className="h-1.5 overflow-hidden rounded-full bg-black/10">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-[width]"
+                style={{ width: `${progress * 100}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              Uploading in the background ({Math.round(progress * 100)}%) —
+              keep this tab open. Viewers see the video the moment it finishes.
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -107,19 +129,9 @@ export function UploadPanel({ blob }: { blob: Blob }) {
           disabled={status === "uploading"}
           className="rounded-lg bg-secondary px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
         >
-          {status === "uploading"
-            ? `Uploading ${Math.round(progress * 100)}%`
-            : "Upload & get link"}
+          {status === "uploading" ? "Starting…" : "Get share link"}
         </button>
       </div>
-      {status === "uploading" && (
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/10">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-[width]"
-            style={{ width: `${progress * 100}%` }}
-          />
-        </div>
-      )}
       {error && <p className="mt-3 text-sm text-primary">{error}</p>}
       <p className="mt-3 text-xs text-muted">
         Links are unlisted — only people you share them with can watch.

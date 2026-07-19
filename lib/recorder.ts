@@ -37,6 +37,14 @@ const QUALITY_PRESETS: Record<RecordingQuality, { width: number; height: number 
   "1080p": { width: 1920, height: 1080 },
 };
 
+/**
+ * Hard recording cap: bounds memory for in-RAM chunks and (later) storage
+ * costs. When the login feature ships, guests drop to GUEST_MAX_RECORDING_MS
+ * and signed-in users keep the full cap.
+ */
+export const MAX_RECORDING_MS = 30 * 60_000;
+export const GUEST_MAX_RECORDING_MS = 5 * 60_000;
+
 const MIME_CANDIDATES = [
   "video/webm;codecs=vp9,opus",
   "video/webm;codecs=vp8,opus",

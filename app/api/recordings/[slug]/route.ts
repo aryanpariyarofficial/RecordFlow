@@ -1,5 +1,6 @@
-import { deleteRecordingRow, renameRecording } from "@/lib/db";
+import { deleteRecordingRow, updateRecording } from "@/lib/db";
 import { deleteVideoAsset } from "@/lib/cloudinary-server";
+import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 const SLUG_RE = /^[a-z0-9]{8,24}$/;
 
@@ -11,29 +12,51 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  if (!rateLimit(`rec-write:${clientIp(request)}`, 60, 60 * 60 * 1000)) {
+    return tooManyRequests();
+  }
   const { slug } = await params;
   if (!SLUG_RE.test(slug)) {
     return Response.json({ error: "Invalid slug." }, { status: 400 });
   }
-  let body: { title?: unknown };
+  let body: { title?: unknown; status?: unknown; durationSeconds?: unknown };
   try {
     body = await request.json();
   } catch {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
-  if (typeof body.title !== "string" || !body.title.trim()) {
-    return Response.json({ error: "Title is required." }, { status: 400 });
+
+  const fields: Partial<{
+    title: string;
+    status: "processing" | "ready";
+    duration_seconds: number;
+  }> = {};
+  if (typeof body.title === "string" && body.title.trim()) {
+    fields.title = body.title.trim().slice(0, 120);
   }
-  const ok = await renameRecording(slug, body.title.trim().slice(0, 120));
+  if (body.status === "ready" || body.status === "processing") {
+    fields.status = body.status;
+  }
+  if (typeof body.durationSeconds === "number" && body.durationSeconds >= 0) {
+    fields.duration_seconds = body.durationSeconds;
+  }
+  if (Object.keys(fields).length === 0) {
+    return Response.json({ error: "Nothing to update." }, { status: 400 });
+  }
+
+  const ok = await updateRecording(slug, fields);
   return ok
     ? Response.json({ ok: true })
-    : Response.json({ error: "Rename failed." }, { status: 503 });
+    : Response.json({ error: "Update failed." }, { status: 503 });
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
+  if (!rateLimit(`rec-write:${clientIp(request)}`, 60, 60 * 60 * 1000)) {
+    return tooManyRequests();
+  }
   const { slug } = await params;
   if (!SLUG_RE.test(slug)) {
     return Response.json({ error: "Invalid slug." }, { status: 400 });
