@@ -470,13 +470,15 @@ function ToggleRow({
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-          checked ? "bg-secondary" : "bg-black/15"
+        className={`relative inline-flex h-7 w-[52px] shrink-0 cursor-pointer items-center rounded-full border transition-all duration-300 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-secondary ${
+          checked
+            ? "border-transparent bg-gradient-to-r from-primary to-secondary shadow-[inset_0_1px_2px_rgba(0,0,0,0.15)]"
+            : "border-black/10 bg-black/10 shadow-[inset_0_1px_2px_rgba(0,0,0,0.08)] hover:bg-black/15"
         }`}
       >
         <span
-          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-            checked ? "translate-x-6" : "translate-x-1"
+          className={`pointer-events-none absolute left-1 h-5 w-5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition-transform duration-300 ease-out ${
+            checked ? "translate-x-6" : "translate-x-0"
           }`}
         />
       </button>
