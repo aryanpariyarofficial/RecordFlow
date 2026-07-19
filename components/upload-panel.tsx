@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { isUploadConfigured, startUpload } from "@/lib/storage";
+import { useUser } from "./use-user";
 
 type UploadStatus = "idle" | "uploading" | "done" | "error";
 
 export function UploadPanel({ blob }: { blob: Blob }) {
+  const { user, loading: userLoading } = useUser();
   const [title, setTitle] = useState(
     `Recording — ${new Date().toLocaleDateString("en-US", {
       month: "short",
@@ -24,6 +27,30 @@ export function UploadPanel({ blob }: { blob: Blob }) {
         <span className="font-semibold text-ink">Share links are almost ready</span>{" "}
         — add your Cloudinary keys to <code>.env.local</code> to enable
         uploading and public viewer links.
+      </div>
+    );
+  }
+
+  if (userLoading) {
+    return (
+      <div className="mt-6 h-24 animate-pulse rounded-xl border border-black/10 bg-black/[0.03]" />
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="mt-6 rounded-xl border border-secondary/25 bg-secondary/5 p-5">
+        <p className="font-semibold">Want a shareable link?</p>
+        <p className="mt-1 text-sm text-muted">
+          Your recording is saved on this device and ready to download below —
+          free, no account. Log in to upload it and share a link instead.
+        </p>
+        <Link
+          href="/login"
+          className="mt-4 inline-block rounded-full bg-secondary px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-secondary/25 transition hover:brightness-110"
+        >
+          Log in / create free account
+        </Link>
       </div>
     );
   }

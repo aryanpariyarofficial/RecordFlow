@@ -5,6 +5,18 @@ stop, and get a local download (Phase 1) or a shareable link (Phase 2+).
 
 ## Current phase
 
+**Auth — Supabase login + freemium gating** ✅ implemented
+Email+password auth via @supabase/ssr (cookie sessions, refreshed in
+`middleware.ts`). `/login` handles sign in/up; `/auth/confirm` handles email
+confirmation links. Gating is server-side: `/api/upload/sign` and
+`POST /api/recordings` require a user; PATCH/DELETE require ownership
+(null `user_id` = pre-auth rows, treated as owned by any signed-in user);
+`/library` redirects guests to `/login` and lists only the user's rows.
+Guests: record + local download + IndexedDB history, 5-min cap
+(`GUEST_MAX_RECORDING_MS`); signed in: uploads, share links, library, 30-min
+cap. Supabase dashboard needs: Site URL + `/auth/confirm` redirect URLs; the
+built-in SMTP is fine for now (low volume).
+
 **Phase 3.5 — Instant links, local history, limits, MP4/trim** ✅ implemented
 - Instant links: `startUpload()` registers a `processing` row + returns the
   share link immediately; upload completes in background; viewer page shows a

@@ -39,6 +39,7 @@ export async function insertRecording(row: {
   duration_seconds: number | null;
   size_bytes: number | null;
   status: RecordingStatus;
+  user_id: string;
 }): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
@@ -73,12 +74,16 @@ export async function getRecordingBySlug(
   return (data as RecordingRow) ?? null;
 }
 
-export async function listRecordings(): Promise<RecordingRow[] | null> {
+export async function listRecordings(
+  userId: string
+): Promise<RecordingRow[] | null> {
   const db = getDb();
   if (!db) return null;
   const { data, error } = await db
     .from("recordings")
     .select("*")
+    // user_id IS NULL covers recordings uploaded before auth existed.
+    .or(`user_id.eq.${userId},user_id.is.null`)
     .order("created_at", { ascending: false });
   // error (e.g. table not created yet) is distinguished from an empty library.
   if (error) return null;

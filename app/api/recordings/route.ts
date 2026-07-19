@@ -1,5 +1,6 @@
 import { insertRecording } from "@/lib/db";
 import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { getUser } from "@/lib/supabase/server";
 
 const SLUG_RE = /^[a-z0-9]{8,24}$/;
 
@@ -10,6 +11,13 @@ const SLUG_RE = /^[a-z0-9]{8,24}$/;
 export async function POST(request: Request) {
   if (!rateLimit(`recordings:${clientIp(request)}`, 20, 60 * 60 * 1000)) {
     return tooManyRequests();
+  }
+  const user = await getUser();
+  if (!user) {
+    return Response.json(
+      { error: "Log in to upload and share recordings." },
+      { status: 401 }
+    );
   }
 
   let body: {
@@ -41,6 +49,7 @@ export async function POST(request: Request) {
       typeof body.durationSeconds === "number" ? body.durationSeconds : null,
     size_bytes: typeof body.sizeBytes === "number" ? body.sizeBytes : null,
     status,
+    user_id: user.id,
   });
 
   if (!ok) {

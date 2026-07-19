@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Recorder } from "@/components/recorder";
+import { AuthButton } from "@/components/auth-button";
 
 export default function Home() {
   return (
@@ -20,9 +21,7 @@ export default function Home() {
           >
             Library
           </Link>
-          <span className="rounded-full border border-black/10 px-3 py-1 text-xs font-medium text-muted">
-            Beta
-          </span>
+          <AuthButton />
         </nav>
       </header>
 

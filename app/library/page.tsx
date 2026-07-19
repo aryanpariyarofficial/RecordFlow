@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { listRecordings } from "@/lib/db";
 import { getUsage } from "@/lib/cloudinary-server";
 import { thumbnailUrl } from "@/lib/cloudinary-urls";
+import { getUser } from "@/lib/supabase/server";
 import { LibraryItem } from "@/components/library-item";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +15,13 @@ export const metadata: Metadata = {
 };
 
 export default async function LibraryPage() {
-  const [recordings, usage] = await Promise.all([listRecordings(), getUsage()]);
+  const user = await getUser();
+  if (!user) redirect("/login");
+
+  const [recordings, usage] = await Promise.all([
+    listRecordings(user.id),
+    getUsage(),
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -112,8 +120,7 @@ export default async function LibraryPage() {
       </main>
 
       <footer className="border-t border-black/5 py-6 text-center text-xs text-muted">
-        RecordFlow — this page will be private to your account once login
-        ships.
+        RecordFlow — your library is private to your account.
       </footer>
     </div>
   );

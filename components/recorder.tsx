@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BubbleSize, Compositor } from "@/lib/compositor";
 import {
+  GUEST_MAX_RECORDING_MS,
   isRecordingSupported,
   MAX_RECORDING_MS,
   RecordingMode,
@@ -12,6 +13,7 @@ import { formatSize, formatTime } from "@/lib/format";
 import { saveLocalRecording } from "@/lib/local-history";
 import { deviceLabel, useMediaDevices } from "./use-devices";
 import { useRecorder } from "./use-recorder";
+import { useUser } from "./use-user";
 import { UploadPanel } from "./upload-panel";
 import { LocalHistory } from "./local-history";
 
@@ -57,17 +59,20 @@ export function Recorder() {
   const [supported, setSupported] = useState(true);
   const [historyToken, setHistoryToken] = useState(0);
   const savedUrlRef = useRef<string | null>(null);
+  const { user } = useUser();
+  // Guests get the short tier; logging in lifts the cap.
+  const maxRecordingMs = user ? MAX_RECORDING_MS : GUEST_MAX_RECORDING_MS;
 
   useEffect(() => {
     setSupported(isRecordingSupported());
   }, []);
 
-  // Hard cap: auto-stop so 30+ minute sessions can't exhaust memory.
+  // Hard cap: auto-stop (also bounds memory on long sessions).
   useEffect(() => {
-    if (status === "recording" && elapsedMs >= MAX_RECORDING_MS) {
+    if (status === "recording" && elapsedMs >= maxRecordingMs) {
       void stop();
     }
-  }, [status, elapsedMs, stop]);
+  }, [status, elapsedMs, maxRecordingMs, stop]);
 
   // "Never lose a recording": auto-save every finished recording to
   // IndexedDB so closing the tab doesn't destroy it.
@@ -255,6 +260,7 @@ export function Recorder() {
               {usesScreen
                 ? "You'll pick a tab, window, or screen — then a 3-second countdown begins."
                 : "Camera starts after a 3-second countdown."}
+              {!user && " Guest recordings cap at 5:00 — log in for 30 minutes."}
             </p>
           </div>
         </div>
@@ -295,14 +301,14 @@ export function Recorder() {
               <p className="text-sm text-muted">
                 {status === "recording" ? "Recording in progress" : "Paused"}
               </p>
-              {MAX_RECORDING_MS - elapsedMs < 60_000 && (
+              {maxRecordingMs - elapsedMs < 60_000 && (
                 <p className="rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
                   Auto-stopping in{" "}
                   {Math.max(
                     0,
-                    Math.ceil((MAX_RECORDING_MS - elapsedMs) / 1000)
+                    Math.ceil((maxRecordingMs - elapsedMs) / 1000)
                   )}
-                  s — recording limit reached
+                  s — {user ? "recording limit reached" : "guest limit (log in for 30 min)"}
                 </p>
               )}
               <div className="flex flex-wrap items-center justify-center gap-3">

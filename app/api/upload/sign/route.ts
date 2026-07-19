@@ -1,14 +1,22 @@
 import { createHash } from "node:crypto";
 import { clientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { getUser } from "@/lib/supabase/server";
 
 /**
  * Signs Cloudinary upload parameters server-side so the API secret never
  * ships to the browser. Only allows uploads into the recordflow/ folder
  * with a slug-shaped public_id and a title-only context string.
+ * Uploading requires an account — guests record and download locally.
  */
 export async function POST(request: Request) {
   if (!rateLimit(`sign:${clientIp(request)}`, 20, 60 * 60 * 1000)) {
     return tooManyRequests();
+  }
+  if (!(await getUser())) {
+    return Response.json(
+      { error: "Log in to upload and share recordings." },
+      { status: 401 }
+    );
   }
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
   const apiKey = process.env.CLOUDINARY_API_KEY;
