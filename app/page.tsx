@@ -13,7 +13,7 @@ export default function Home() {
           </span>
         </div>
         <span className="rounded-full border border-black/10 px-3 py-1 text-xs font-medium text-muted">
-          Phase 1 · MVP
+          Phase 2 · Beta
         </span>
       </header>
 
@@ -27,8 +27,8 @@ export default function Home() {
             </span>
           </h1>
           <p className="mx-auto mt-5 max-w-md text-lg text-muted">
-            Screen + mic recording straight from your browser. No installs, no
-            accounts — hit record and go.
+            Screen, webcam bubble, and mic — straight from your browser. Hit
+            record, then share a link or download.
           </p>
         </div>
 
@@ -36,7 +36,7 @@ export default function Home() {
       </main>
 
       <footer className="border-t border-black/5 py-6 text-center text-xs text-muted">
-        RecordFlow — recordings stay on your device. Nothing is uploaded.
+        RecordFlow — recordings stay on your device until you choose to share.
       </footer>
     </div>
   );

@@ -5,12 +5,19 @@ stop, and get a local download (Phase 1) or a shareable link (Phase 2+).
 
 ## Current phase
 
-**Phase 1 — MVP Recorder** ✅ implemented
-Record screen + mic → countdown → pause/resume/stop with timer → preview →
-download `.webm` locally. No backend, no uploads.
+**Phase 2 — Webcam bubble + share links** ✅ implemented
+Three modes (screen / screen + cam bubble / camera-only), draggable + resizable
+bubble via canvas compositing (`lib/compositor.ts`, Worker-driven draw loop so
+background tabs don't throttle it), mic/camera device pickers, live mic mute,
+Cloudinary signed uploads (chunked for large files) and public viewer pages at
+`/v/[slug]` (metadata read from Cloudinary Admin API — no database yet).
 
-Next up: **Phase 2** — webcam bubble (canvas compositing), device pickers,
-Cloudinary signed uploads, public viewer page `/v/[slug]`.
+Requires env vars (see `.env.example`): `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME`,
+`CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` — locally in `.env.local` and on
+Vercel. Without them the app still works; upload UI shows a setup hint.
+
+Next up: **Phase 3** — Supabase Auth + video library, thumbnails, chunked
+upload *during* recording (instant links), view counter, storage usage meter.
 
 ## Stack
 

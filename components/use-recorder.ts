@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  CameraPermissionError,
   MicPermissionError,
   RecorderOptions,
   RecordingResult,
@@ -23,6 +24,10 @@ export function useRecorder() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [result, setResult] = useState<RecordingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [micMuted, setMicMutedState] = useState(false);
+  // Mirrors recorderRef so the UI re-renders with access to the engine
+  // (compositor canvas, camera preview stream) once streams exist.
+  const [engine, setEngine] = useState<ScreenRecorder | null>(null);
 
   const recorderRef = useRef<ScreenRecorder | null>(null);
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -65,27 +70,33 @@ export function useRecorder() {
       setStatus("idle");
     } finally {
       recorderRef.current = null;
+      setEngine(null);
     }
   }, [clearTimers]);
 
   const start = useCallback(
     async (options: RecorderOptions) => {
       setError(null);
+      setMicMutedState(false);
       const recorder = new ScreenRecorder();
       try {
         await recorder.prepare(options);
       } catch (err) {
-        if (err instanceof MicPermissionError) {
+        if (
+          err instanceof MicPermissionError ||
+          err instanceof CameraPermissionError
+        ) {
           setError(err.message);
         } else if (err instanceof DOMException && err.name === "NotAllowedError") {
           // User dismissed the share picker — not an error worth showing.
         } else {
-          setError("Could not start screen capture. Check browser permissions.");
+          setError("Could not start capture. Check browser permissions.");
         }
         return;
       }
 
       recorderRef.current = recorder;
+      setEngine(recorder);
       recorder.onScreenShareEnded = () => {
         // "Stop sharing" from the browser UI ends the recording gracefully.
         void stop();
@@ -112,6 +123,7 @@ export function useRecorder() {
         } catch {
           recorder.cancel();
           recorderRef.current = null;
+          setEngine(null);
           setError("Recording failed to start.");
           setStatus("idle");
         }
@@ -124,6 +136,7 @@ export function useRecorder() {
     clearTimers();
     recorderRef.current?.cancel();
     recorderRef.current = null;
+    setEngine(null);
     setStatus("idle");
   }, [clearTimers]);
 
@@ -141,6 +154,13 @@ export function useRecorder() {
     startTicker();
     setStatus("recording");
   }, [startTicker]);
+
+  const toggleMicMuted = useCallback(() => {
+    setMicMutedState((muted) => {
+      recorderRef.current?.setMicMuted(!muted);
+      return !muted;
+    });
+  }, []);
 
   const reset = useCallback(() => {
     if (result) URL.revokeObjectURL(result.url);
@@ -163,11 +183,14 @@ export function useRecorder() {
     elapsedMs,
     result,
     error,
+    engine,
+    micMuted,
     start,
     cancelCountdown,
     pause,
     resume,
     stop,
+    toggleMicMuted,
     reset,
   };
 }
